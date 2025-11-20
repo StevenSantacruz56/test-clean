@@ -8,14 +8,14 @@ import asyncio
 import sys
 from pathlib import Path
 
-# Add src/app to path
-sys.path.insert(0, str(Path(__file__).parent.parent / "src" / "app"))
+# Add app to path
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from infrastructure.database.postgres.connection import engine
-from infrastructure.database.postgres.models.base import Base
-from infrastructure.database.postgres.models.company_model import CompanyModel
-from infrastructure.database.postgres.models.company_detail_model import CompanyDetailModel
-from infrastructure.database.postgres.models.company_type_model import CompanyTypeModel, CompanyCompanyTypeModel
+from app.infrastructure.database.postgres.connection import engine
+from app.infrastructure.database.postgres.models.base import Base
+from app.infrastructure.database.postgres.models.company_model import CompanyModel
+from app.infrastructure.database.postgres.models.company_detail_model import CompanyDetailModel
+from app.infrastructure.database.postgres.models.company_type_model import CompanyTypeModel, CompanyCompanyTypeModel
 
 
 async def init_db():

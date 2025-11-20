@@ -1670,7 +1670,6 @@ class CreateUserUseCase:
   - test: To add or modify tests.
   - chore: For maintenance and configuration tasks that don't affect the source code or tests.
   - perf: To improve performance.
-- Update documentation and examples
 - Update CHANGELOG.md with clear user-facing description
 
 ## Code Quality Standards
