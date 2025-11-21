@@ -9,6 +9,7 @@ from app.domain.repositories.company_repository import CompanyRepository
 from app.domain.exceptions.company_exceptions import CompanyAlreadyExistsException
 from app.application.dtos.company_dto import CreateCompanyDTO, CompanyDTO
 from app.application.mappers.company_mapper import CompanyMapper
+from app.application.services.event_bus import EventBusService
 
 
 class CreateCompanyUseCase:
@@ -19,14 +20,20 @@ class CreateCompanyUseCase:
     It validates business rules, creates the aggregate, and persists it.
     """
 
-    def __init__(self, company_repository: CompanyRepository):
+    def __init__(
+        self,
+        company_repository: CompanyRepository,
+        event_bus: EventBusService
+    ):
         """
         Initialize use case.
 
         Args:
             company_repository: Repository for company persistence
+            event_bus: Event bus for publishing domain events
         """
         self.company_repository = company_repository
+        self.event_bus = event_bus
 
     async def execute(self, dto: CreateCompanyDTO) -> CompanyDTO:
         """
@@ -56,10 +63,10 @@ class CreateCompanyUseCase:
         # Persist the aggregate
         saved_company = await self.company_repository.save(company_aggregate)
 
-        # TODO: Publish domain events
-        # for event in saved_company.events:
-        #     await self.event_bus.publish(event)
-        # saved_company.clear_events()
+        # Publish domain events
+        for event in saved_company.events:
+            await self.event_bus.publish(event)
+        saved_company.clear_events()
 
         # Convert to DTO and return
         return CompanyMapper.to_dto(saved_company)

@@ -4,9 +4,8 @@ Company Updated Event.
 Event triggered when a company is updated.
 """
 
-from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 from uuid import UUID
 
 from app.domain.events.base_event import BaseDomainEvent
@@ -17,16 +16,46 @@ class CompanyUpdated(BaseDomainEvent):
     Event: Company was updated.
 
     This event is triggered when company information is updated.
+
+    Event name: testclean.api.1.event.company.updated
     """
 
-    def __init__(self, company_id: UUID, company_name: str, country_id: UUID):
-        super().__init__()
+    EVENT_NAME = "testclean.api.1.event.company.updated"
+
+    def __init__(
+        self,
+        company_id: UUID,
+        company_name: str,
+        country_id: UUID,
+        event_id: str | None = None,
+        occurred_at: datetime | None = None
+    ):
+        """
+        Initialize CompanyUpdated event.
+
+        Args:
+            company_id: UUID of the updated company
+            company_name: Updated name of the company
+            country_id: UUID of the country
+            event_id: Unique event identifier (optional)
+            occurred_at: When the event occurred (optional)
+        """
+        super().__init__(
+            event_name=self.EVENT_NAME,
+            event_id=event_id,
+            occurred_on=occurred_at
+        )
         self.company_id = company_id
         self.company_name = company_name
         self.country_id = country_id
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convert event to dictionary."""
+        """
+        Convert event to dictionary for serialization.
+
+        Returns:
+            Dict with all event data
+        """
         data = super().to_dict()
         data.update(
             {
@@ -36,3 +65,29 @@ class CompanyUpdated(BaseDomainEvent):
             }
         )
         return data
+
+    @classmethod
+    def from_dict(cls, event_id: str, occurred_on: datetime, attributes: dict) -> "CompanyUpdated":
+        """
+        Create event from dictionary (deserialization).
+
+        Args:
+            event_id: Event unique identifier
+            occurred_on: When the event occurred
+            attributes: Event attributes with company_id, company_name, country_id
+
+        Returns:
+            CompanyUpdated event instance
+        """
+        return cls(
+            company_id=UUID(attributes["company_id"]),
+            company_name=attributes["company_name"],
+            country_id=UUID(attributes["country_id"]),
+            event_id=event_id,
+            occurred_at=occurred_on
+        )
+
+    @classmethod
+    def _get_default_event_name(cls) -> str:
+        """Get default event name for this class."""
+        return cls.EVENT_NAME
