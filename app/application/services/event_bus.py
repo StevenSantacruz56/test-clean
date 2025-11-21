@@ -1,22 +1,32 @@
 """
-Event Bus Service using package-events-bus.
+Event Bus Service.
 
 This module provides event bus functionality for publishing and subscribing to domain events.
-Uses the package-events-bus library for a robust event-driven architecture.
+Implements a simple in-memory event bus with support for both sync and async handlers.
 """
 
-from typing import Type, Callable, Any, Optional
+from typing import Type, Callable, Any, Optional, Dict, List
 import logging
-from package_events_bus import EventBus as PackageEventBus, Event, AsyncEventBus
+import asyncio
+from dataclasses import dataclass
 
 from app.core.config import settings
+from app.domain.events.base_event import BaseDomainEvent
 
 logger = logging.getLogger(__name__)
 
 
+@dataclass
+class EventHandler:
+    """Wrapper for event handler with priority."""
+
+    handler: Callable[[BaseDomainEvent], Any]
+    priority: int = 0
+
+
 class EventBusService:
     """
-    Wrapper service for package-events-bus EventBus.
+    In-memory Event Bus implementation.
 
     Provides a clean interface for publishing and subscribing to domain events.
     Supports both sync and async event handlers based on configuration.
@@ -30,18 +40,13 @@ class EventBusService:
             use_async: Whether to use async event handlers. Defaults to settings.event_bus_async
         """
         self.use_async = use_async if use_async is not None else settings.event_bus_async
-
-        if self.use_async:
-            self._bus = AsyncEventBus()
-            logger.info("Initialized AsyncEventBus")
-        else:
-            self._bus = PackageEventBus()
-            logger.info("Initialized EventBus (sync)")
+        self._subscribers: Dict[Type[BaseDomainEvent], List[EventHandler]] = {}
+        logger.info(f"Initialized EventBus ({'async' if self.use_async else 'sync'})")
 
     def subscribe(
         self,
-        event_type: Type[Event],
-        handler: Callable[[Event], Any],
+        event_type: Type[BaseDomainEvent],
+        handler: Callable[[BaseDomainEvent], Any],
         priority: int = 0
     ) -> None:
         """
@@ -60,7 +65,15 @@ class EventBusService:
             >>> event_bus.subscribe(CompanyCreated, on_company_created)
         """
         try:
-            self._bus.subscribe(event_type, handler, priority=priority)
+            if event_type not in self._subscribers:
+                self._subscribers[event_type] = []
+
+            event_handler = EventHandler(handler=handler, priority=priority)
+            self._subscribers[event_type].append(event_handler)
+
+            # Sort by priority (higher first)
+            self._subscribers[event_type].sort(key=lambda h: h.priority, reverse=True)
+
             logger.info(
                 f"Subscribed handler '{handler.__name__}' to event '{event_type.__name__}' "
                 f"with priority {priority}"
@@ -71,8 +84,8 @@ class EventBusService:
 
     def unsubscribe(
         self,
-        event_type: Type[Event],
-        handler: Callable[[Event], Any]
+        event_type: Type[BaseDomainEvent],
+        handler: Callable[[BaseDomainEvent], Any]
     ) -> None:
         """
         Unsubscribe a handler from an event type.
@@ -85,13 +98,16 @@ class EventBusService:
             >>> event_bus.unsubscribe(CompanyCreated, on_company_created)
         """
         try:
-            self._bus.unsubscribe(event_type, handler)
-            logger.info(f"Unsubscribed handler '{handler.__name__}' from event '{event_type.__name__}'")
+            if event_type in self._subscribers:
+                self._subscribers[event_type] = [
+                    h for h in self._subscribers[event_type] if h.handler != handler
+                ]
+                logger.info(f"Unsubscribed handler '{handler.__name__}' from event '{event_type.__name__}'")
         except Exception as e:
             logger.error(f"Error unsubscribing handler from event {event_type.__name__}: {e}")
             raise
 
-    async def publish(self, event: Event) -> None:
+    async def publish(self, event: BaseDomainEvent) -> None:
         """
         Publish an event to all subscribers.
 
@@ -107,20 +123,54 @@ class EventBusService:
             return
 
         try:
-            event_name = event.__class__.__name__
+            event_type = type(event)
+            event_name = event_type.__name__
             logger.info(f"Publishing event: {event_name}")
 
-            if self.use_async:
-                await self._bus.publish(event)
-            else:
-                self._bus.publish(event)
+            if event_type not in self._subscribers:
+                logger.debug(f"No subscribers for event: {event_name}")
+                return
+
+            handlers = self._subscribers[event_type]
+            logger.debug(f"Found {len(handlers)} handler(s) for event: {event_name}")
+
+            # Execute handlers based on async mode
+            for event_handler in handlers:
+                handler = event_handler.handler
+                try:
+                    if self.use_async:
+                        if asyncio.iscoroutinefunction(handler):
+                            await handler(event)
+                        else:
+                            # Run sync handler in executor
+                            loop = asyncio.get_event_loop()
+                            await loop.run_in_executor(None, handler, event)
+                    else:
+                        if asyncio.iscoroutinefunction(handler):
+                            logger.warning(
+                                f"Async handler '{handler.__name__}' called in sync mode. "
+                                f"Consider setting event_bus_async=True"
+                            )
+                            asyncio.run(handler(event))
+                        else:
+                            handler(event)
+
+                    logger.debug(f"Handler '{handler.__name__}' executed successfully for event: {event_name}")
+
+                except Exception as e:
+                    logger.error(
+                        f"Error in handler '{handler.__name__}' for event {event_name}: {e}",
+                        exc_info=True
+                    )
+                    # Continue with other handlers even if one fails
 
             logger.debug(f"Event published successfully: {event_name}")
+
         except Exception as e:
             logger.error(f"Error publishing event {event.__class__.__name__}: {e}", exc_info=True)
             raise
 
-    def clear_subscribers(self, event_type: Optional[Type[Event]] = None) -> None:
+    def clear_subscribers(self, event_type: Optional[Type[BaseDomainEvent]] = None) -> None:
         """
         Clear subscribers for a specific event type or all events.
 
@@ -133,12 +183,11 @@ class EventBusService:
         """
         try:
             if event_type:
-                self._bus.clear_subscribers(event_type)
+                if event_type in self._subscribers:
+                    del self._subscribers[event_type]
                 logger.info(f"Cleared subscribers for event: {event_type.__name__}")
             else:
-                # Clear all subscribers
-                if hasattr(self._bus, '_subscribers'):
-                    self._bus._subscribers.clear()
+                self._subscribers.clear()
                 logger.info("Cleared all event subscribers")
         except Exception as e:
             logger.error(f"Error clearing subscribers: {e}")
@@ -147,9 +196,13 @@ class EventBusService:
     @property
     def subscriber_count(self) -> int:
         """Get total number of subscribed handlers across all events."""
-        if hasattr(self._bus, '_subscribers'):
-            return sum(len(handlers) for handlers in self._bus._subscribers.values())
-        return 0
+        return sum(len(handlers) for handlers in self._subscribers.values())
+
+    def get_subscribers(self, event_type: Type[BaseDomainEvent]) -> List[Callable]:
+        """Get all handlers subscribed to an event type."""
+        if event_type in self._subscribers:
+            return [h.handler for h in self._subscribers[event_type]]
+        return []
 
 
 # Global event bus instance

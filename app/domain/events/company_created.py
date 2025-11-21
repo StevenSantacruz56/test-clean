@@ -12,7 +12,6 @@ from uuid import UUID
 from app.domain.events.base_event import BaseDomainEvent
 
 
-@dataclass
 class CompanyCreated(BaseDomainEvent):
     """
     Event: Company was created.
@@ -20,27 +19,8 @@ class CompanyCreated(BaseDomainEvent):
     This event is triggered when a new company is successfully created.
     """
 
-    company_id: UUID
-    company_name: str
-    country_id: UUID
-
-    def __init__(
-        self,
-        company_id: UUID,
-        company_name: str,
-        country_id: UUID,
-        occurred_at: Optional[datetime] = None,
-    ):
-        """
-        Initialize CompanyCreated event.
-
-        Args:
-            company_id: ID of the created company
-            company_name: Name of the company
-            country_id: Country ID
-            occurred_at: When the event occurred
-        """
-        super().__init__(occurred_at)
+    def __init__(self, company_id: UUID, company_name: str, country_id: UUID):
+        super().__init__()
         self.company_id = company_id
         self.company_name = company_name
         self.country_id = country_id

@@ -1,39 +1,26 @@
 """
 Base Domain Event.
 
-Base class for all domain events using package-events-bus.
+Base class for all domain events.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, Optional
 from uuid import UUID, uuid4
-from package_events_bus import Event
 
 
 @dataclass
-class BaseDomainEvent(Event):
+class BaseDomainEvent:
     """
     Base class for domain events.
 
     Domain events represent important facts that have occurred in the domain.
     They are named in past tense.
-
-    Inherits from package_events_bus.Event for event bus integration.
     """
 
-    event_id: UUID
-    occurred_at: datetime
-
-    def __init__(self, occurred_at: Optional[datetime] = None):
-        """
-        Initialize base domain event.
-
-        Args:
-            occurred_at: When the event occurred (defaults to now)
-        """
-        self.event_id = uuid4()
-        self.occurred_at = occurred_at or datetime.utcnow()
+    event_id: UUID = field(default_factory=uuid4)
+    occurred_at: datetime = field(default_factory=lambda: datetime.utcnow())
 
     def to_dict(self) -> Dict[str, Any]:
         """
